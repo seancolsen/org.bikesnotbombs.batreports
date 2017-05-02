@@ -3,7 +3,10 @@
 /**
  * A custom contact search
  */
-class CRM_Batreports_Form_Search_BATExport extends CRM_Contact_Form_Search_Custom_Base implements CRM_Contact_Form_Search_Interface {
+class CRM_Batreports_Form_Search_BATExport
+extends CRM_Contact_Form_Search_Custom_Base
+implements CRM_Contact_Form_Search_Interface {
+
   function __construct(&$formValues) {
     parent::__construct($formValues);
   }
@@ -15,28 +18,21 @@ class CRM_Batreports_Form_Search_BATExport extends CRM_Contact_Form_Search_Custo
    * @return void
    */
   function buildForm(&$form) {
-    CRM_Utils_System::setTitle(ts('My Search Title'));
+    CRM_Utils_System::setTitle(ts('Bike-A-Thon export'));
 
-    $form->add('text',
-      'household_name',
-      ts('Household Name'),
-      TRUE
-    );
-
-    $stateProvince = array('' => ts('- any state/province -')) + CRM_Core_PseudoConstant::stateProvince();
-    $form->addElement('select', 'state_province_id', ts('State/Province'), $stateProvince);
+    $form->add('text', 'year', ts('Year'));
 
     // Optionally define default search values
+    $date = date_create('now');
     $form->setDefaults(array(
-      'household_name' => '',
-      'state_province_id' => NULL,
+      'year' => date_format($date, 'Y'),
     ));
 
     /**
      * if you are using the standard template, this array tells the template what elements
      * are part of the search criteria
      */
-    $form->assign('elements', array('household_name', 'state_province_id'));
+    $form->assign('elements', array('year'));
   }
 
   /**
@@ -62,10 +58,35 @@ class CRM_Batreports_Form_Search_BATExport extends CRM_Contact_Form_Search_Custo
   function &columns() {
     // return by reference
     $columns = array(
-      ts('Contact Id') => 'contact_id',
-      ts('Contact Type') => 'contact_type',
-      ts('Name') => 'sort_name',
-      ts('State') => 'state_province',
+      ts('pile') => 'pile',
+      ts('cid') => 'cid',
+      ts('num') => 'num',
+      ts('last_name') => 'last_name',
+      ts('first_name') => 'first_name',
+      ts('email') => 'email',
+      ts('phone') => 'phone',
+      ts('address') => 'address',
+      ts('status') => 'status',
+      ts('reg_date') => 'reg_date',
+      ts('reg_by_contact_id') => 'reg_by_contact_id',
+      ts('reg_by_name') => 'reg_by_name',
+      ts('drupal_user_name') => 'drupal_user_name',
+      ts('route ') => 'route',
+      ts('total_is_public') => 'total_is_public',
+      ts('total') => 'total',
+      ts('indiv_t') => 'indiv_t',
+      ts('overdue') => 'overdue',
+      ts('fmin') => 'fmin',
+      ts('pcp_id') => 'pcp_id',
+      ts('pcp_url') => 'pcp_url',
+      ts('time_printed') => 'time_printed',
+      ts('bat_age') => 'bat_age',
+      ts('team_name') => 'team_name',
+      ts('emergency_name') => 'emergency_name',
+      ts('emergency_phone') => 'emergency_phone',
+      ts('prev_years') => 'prev_years',
+      ts('max_prev_indiv_t') => 'prev_max_direct',
+      ts('note') => 'note'
     );
     return $columns;
   }
@@ -82,7 +103,13 @@ class CRM_Batreports_Form_Search_BATExport extends CRM_Contact_Form_Search_Custo
    */
   function all($offset = 0, $rowcount = 0, $sort = NULL, $includeContactIDs = FALSE, $justIDs = FALSE) {
     // delegate to $this->sql(), $this->select(), $this->from(), $this->where(), etc.
-    return $this->sql($this->select(), $offset, $rowcount, $sort, $includeContactIDs, NULL);
+    return $this->sql(
+        $this->select(),
+        $offset,
+        $rowcount,
+        $sort,
+        $includeContactIDs,
+        "group by rider.contact_id");
   }
 
   /**
@@ -92,10 +119,46 @@ class CRM_Batreports_Form_Search_BATExport extends CRM_Contact_Form_Search_Custo
    */
   function select() {
     return "
-      contact_a.id           as contact_id  ,
-      contact_a.contact_type as contact_type,
-      contact_a.sort_name    as sort_name,
-      state_province.name    as state_province
+      case
+        when rider.last_name rlike '^ *[A-B].*' then 'A-B'
+        when rider.last_name rlike '^ *[C-D].*' then 'C-D'
+        when rider.last_name rlike '^ *[E-G].*' then 'E-G'
+        when rider.last_name rlike '^ *[H-K].*' then 'H-K'
+        when rider.last_name rlike '^ *(L|M[A-E]).*' then 'L-Me'
+        when rider.last_name rlike '^ *(M[F-Z]|[N-Q]).*' then 'Mf-Q'
+        when rider.last_name rlike '^ *(R|S[A-M]).*' then 'R-Sm'
+        when rider.last_name rlike '^ *(S[N-Z]|[T-Z]).*' then 'Sn-Z'
+        else '??'
+      end as pile,
+      rider.contact_id as cid,
+      rider.rider_id as num,
+      rider.last_name as last_name,
+      rider.first_name as first_name,
+      group_concat(distinct email.email separator '\n') as email,
+      group_concat(distinct phone.phone separator '\n') as phone,
+      group_concat(distinct concat_ws(', ', street_address, supplemental_address_1,
+              city, state.abbreviation, postal_code) separator '\n') as address,
+      part_status as status,
+      part_datetime as reg_date,
+      reg_by_contact_id,
+      reg_by_name,
+      drupal_user_name,
+      route,
+      total_is_public,
+      format(smart_total,2) as total,
+      if(indiv_total = smart_total, '(same)', indiv_total) as indiv_t,
+      format(overdue_total,2) as overdue,
+      format(fundr_min,0) as fmin,
+      pcp_id,
+      pcp_url,
+      now() as time_printed,
+      timestampdiff(year, contact.birth_date, @this_bat) as bat_age,
+      coalesce(team_name,'') as team_name,
+      rider.emergency_name,
+      rider.emergency_phone,
+      rider.note,
+      rider.prev_years,
+      rider.prev_max_direct
     ";
   }
 
@@ -105,13 +168,32 @@ class CRM_Batreports_Form_Search_BATExport extends CRM_Contact_Form_Search_Custo
    * @return string, sql fragment with FROM and JOIN clauses
    */
   function from() {
+    $sqlFile = __DIR__ . "/" . basename(__FILE__, '.php') . '.sql';
+    $sql = file_get_contents($sqlFile);
+    // TODO: replacements
+    //    $state = CRM_Utils_Array::value('state_province_id',
+    //      $this->_formValues
+    //    );
+    $queries = explode(";", $sql);
+    foreach ($queries as $query) {
+      if (!empty(trim($query))) {
+        CRM_Core_DAO::executeQuery($query);
+      }
+    }
+
     return "
-      FROM      civicrm_contact contact_a
-      LEFT JOIN civicrm_address address ON ( address.contact_id       = contact_a.id AND
-                                             address.is_primary       = 1 )
-      LEFT JOIN civicrm_email           ON ( civicrm_email.contact_id = contact_a.id AND
-                                             civicrm_email.is_primary = 1 )
-      LEFT JOIN civicrm_state_province state_province ON state_province.id = address.state_province_id
+      from rider
+      join civicrm_contact contact on contact.id = rider.contact_id
+      left join civicrm_email email on
+        email.contact_id = rider.contact_id and
+        email.is_primary = 1
+      left join civicrm_phone phone on
+        phone.contact_id = rider.contact_id and
+        phone.is_primary = 1
+      left join civicrm_address address on
+        address.contact_id = rider.contact_id and
+        address.is_primary = 1
+      left join civicrm_state_province state on state.id = address.state_province_id
     ";
   }
 
@@ -122,42 +204,7 @@ class CRM_Batreports_Form_Search_BATExport extends CRM_Contact_Form_Search_Custo
    * @return string, sql fragment with conditional expressions
    */
   function where($includeContactIDs = FALSE) {
-    $params = array();
-    $where = "contact_a.contact_type   = 'Household'";
-
-    $count  = 1;
-    $clause = array();
-    $name   = CRM_Utils_Array::value('household_name',
-      $this->_formValues
-    );
-    if ($name != NULL) {
-      if (strpos($name, '%') === FALSE) {
-        $name = "%{$name}%";
-      }
-      $params[$count] = array($name, 'String');
-      $clause[] = "contact_a.household_name LIKE %{$count}";
-      $count++;
-    }
-
-    $state = CRM_Utils_Array::value('state_province_id',
-      $this->_formValues
-    );
-    if (!$state &&
-      $this->_stateID
-    ) {
-      $state = $this->_stateID;
-    }
-
-    if ($state) {
-      $params[$count] = array($state, 'Integer');
-      $clause[] = "state_province.id = %{$count}";
-    }
-
-    if (!empty($clause)) {
-      $where .= ' AND ' . implode(' AND ', $clause);
-    }
-
-    return $this->whereClause($where, $params);
+    return "rider.reg_level != 'team'";
   }
 
   /**
@@ -170,12 +217,35 @@ class CRM_Batreports_Form_Search_BATExport extends CRM_Contact_Form_Search_Custo
   }
 
   /**
-   * Modify the content of each row
+   * @param int $offset
+   * @param int $rowcount
+   * @param null $sort
+   * @param bool $returnSQL
    *
-   * @param array $row modifiable SQL result row
-   * @return void
+   * @return string
    */
-  function alterRow(&$row) {
-    $row['sort_name'] .= ' ( altered )';
+  public function contactIDs($offset = 0, $rowcount = 0, $sort = NULL, $returnSQL = FALSE) {
+    $sql = $this->sql(
+      'rider.contact_id as contact_id',
+      $offset,
+      $rowcount,
+      $sort
+    );
+
+    if ($returnSQL) {
+      return $sql;
+    }
+
+    return CRM_Core_DAO::composeQuery($sql, CRM_Core_DAO::$_nullArray);
   }
+
+  /**
+   * @return null|string
+   */
+  public function count() {
+    return CRM_Core_DAO::singleValueQuery(
+      $this->sql('count(distinct rider.contact_id) as total')
+    );
+  }
+
 }

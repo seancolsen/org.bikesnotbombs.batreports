@@ -39,7 +39,7 @@ set @this_bat = (select start_date from civicrm_event where id = @event_id);
 drop temporary table if exists approved_team;
 create temporary table approved_team (
   team_name char(100),
-  unique index(team_name) );
+  unique index(team_name) ) character set utf8 collate utf8_unicode_ci;
 insert into approved_team select distinct
   bat.team_65
 from civicrm_participant part
@@ -97,7 +97,7 @@ create temporary table rider (
   index(total_is_public),
   index(team_name),
   index(reg_by_contact_id),
-  index(group_id) );
+  index(group_id) ) character set utf8 collate utf8_unicode_ci;
 set @prev_rider_sequential_id = 0;
 insert into rider (
     contact_id,
@@ -110,7 +110,7 @@ insert into rider (
     contact.id,
     @prev_rider_sequential_id := @prev_rider_sequential_id + 1
       as rider_sequential_id,
-    trim(coalesce(nick_name,first_name)) as first_name,
+    first_name as first_name,
     trim(last_name) as last_name,
     coalesce(concat(
         trim(coalesce(nick_name,first_name)), ' ',
@@ -140,7 +140,7 @@ drop temporary table if exists rider_page;
 create temporary table rider_page (
   contact_id int(10),
   page_id int(10),
-  unique index(contact_id) );
+  unique index(contact_id) ) character set utf8 collate utf8_unicode_ci;
 insert into rider_page select
   pcp.contact_id,
   max(pcp.id)
@@ -213,13 +213,13 @@ create temporary table drupal_user (
   email char(50),
   unique index(id),
   unique index(name),
-  unique index(email) );
+  unique index(email) ) character set utf8 collate utf8_unicode_ci;
 /* insert into drupal_user
   select
     uid,
     name,
     mail
-  from liv_drup.users; */ /* TODO: get table name dynamically */
+  from liv_drup.users */ /* TODO: get table name dynamically */
 
 update rider
 join civicrm_uf_match uf on uf.contact_id = rider.contact_id
@@ -235,7 +235,7 @@ create temporary table contact_total (
   status char(50),
   total decimal(7,2),
   index(contact_id),
-  index(status) );
+  index(status) ) character set utf8 collate utf8_unicode_ci;
 insert into contact_total
   select
     soft.contact_id,
@@ -305,7 +305,7 @@ create temporary table fr_group (
   index(percent_of_min_raised),
   index(percent_of_riders_fundraising),
   index(min_is_met),
-  index(is_group_fundraising) );
+  index(is_group_fundraising) ) character set utf8 collate utf8_unicode_ci;
 
 insert into fr_group (group_type, reg_by_contact_id)
   select
@@ -396,7 +396,7 @@ drop temporary table if exists others;
 create temporary table others (
   contact_id int(10),
   others char(200),
-  unique index(contact_id) );
+  unique index(contact_id) ) character set utf8 collate utf8_unicode_ci;
 insert into others
   select
     rider.contact_id,
@@ -486,7 +486,7 @@ drop temporary table if exists prev_years_summary;
 create temporary table prev_years_summary (
   contact_id int(10),
   prev_years char(200),
-  unique index(contact_id) );
+  unique index(contact_id) ) character set utf8 collate utf8_unicode_ci;
 insert into prev_years_summary select
   contact_id,
   group_concat(
@@ -517,7 +517,7 @@ create temporary table direct_fundraising_by_year (
   direct_fundraising decimal(7,2),
   index(contact_id),
   unique index(contact_id, year),
-  index(direct_fundraising) );
+  index(direct_fundraising) ) character set utf8 collate utf8_unicode_ci;
 insert into direct_fundraising_by_year select
   soft.contact_id,
   year(contrib.receive_date) as year,
@@ -535,7 +535,7 @@ drop temporary table if exists prev_max_direct;
 create temporary table prev_max_direct (
   contact_id int(10),
   prev_max_direct decimal(7,2),
-  unique index(contact_id) );
+  unique index(contact_id) ) character set utf8 collate utf8_unicode_ci;
 insert into prev_max_direct select
   contact_id,
   max(direct_fundraising)
@@ -546,64 +546,3 @@ group by contact_id;
 update rider
 join prev_max_direct on prev_max_direct.contact_id = rider.contact_id
 set rider.prev_max_direct = prev_max_direct.prev_max_direct;
-
-
-
-select
-  case
-    when rider.last_name rlike '^ *[A-B].*' then 'A-B'
-    when rider.last_name rlike '^ *[C-D].*' then 'C-D'
-    when rider.last_name rlike '^ *[E-G].*' then 'E-G'
-    when rider.last_name rlike '^ *[H-K].*' then 'H-K'
-    when rider.last_name rlike '^ *(L|M[A-E]).*' then 'L-Me'
-    when rider.last_name rlike '^ *(M[F-Z]|[N-Q]).*' then 'Mf-Q'
-    when rider.last_name rlike '^ *(R|S[A-M]).*' then 'R-Sm'
-    when rider.last_name rlike '^ *(S[N-Z]|[T-Z]).*' then 'Sn-Z'
-    else '??'
-  end as pile,
-  rider.contact_id as cid,
-  rider.rider_id as num,
-  rider.last_name as last_name,
-  rider.first_name as first_name,
-  group_concat(distinct email.email separator '\n') as email,
-  group_concat(distinct phone.phone separator '\n') as phone,
-  group_concat(distinct concat_ws(', ', street_address, supplemental_address_1,
-          city, state.abbreviation, postal_code) separator '\n') as address,
-  part_status as status,
-  part_datetime as reg_date,
-  reg_by_contact_id,
-  reg_by_name,
-  drupal_user_name,
-  route,
-  total_is_public,
-  format(smart_total,2) as total,
-  if(indiv_total = smart_total, '(same)', indiv_total) as indiv_t,
-  format(overdue_total,2) as overdue,
-  format(fundr_min,0) as fmin,
-  pcp_id,
-  pcp_url,
-  now() as time_printed,
-  timestampdiff(year, contact.birth_date, @this_bat) as bat_age,
-  coalesce(team_name,'') as team_name,
-  rider.emergency_name,
-  rider.emergency_phone,
-  rider.note,
-  rider.prev_years,
-  rider.prev_max_direct
-from rider
-join civicrm_contact contact on contact.id = rider.contact_id
-left join civicrm_email email on
-  email.contact_id = rider.contact_id and
-  email.is_primary = 1
-left join civicrm_phone phone on
-  phone.contact_id = rider.contact_id and
-  phone.is_primary = 1
-left join civicrm_address address on
-  address.contact_id = rider.contact_id and
-  address.is_primary = 1
-left join civicrm_state_province state on state.id = address.state_province_id
-where
-  rider.reg_level != 'team'
-group by rider.contact_id
-
-

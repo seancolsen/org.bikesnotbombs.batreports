@@ -163,22 +163,38 @@ implements CRM_Contact_Form_Search_Interface {
   }
 
   /**
-   * Construct a SQL FROM clause
-   *
-   * @return string, sql fragment with FROM and JOIN clauses
+   * Create temporary tables based on SQL in a file with the same name as this
+   * file (but .sql at the end instead of .php). Values in the sql file are
+   * replaced with dynamic values when they look like %this%.
    */
-  function from() {
+  function executePreSQL() {
     $sqlFile = __DIR__ . "/" . basename(__FILE__, '.php') . '.sql';
     $sql = file_get_contents($sqlFile);
-    // TODO: replacements
-    //    $state = CRM_Utils_Array::value('state_province_id',
-    //      $this->_formValues
-    //    );
+    $replacements = array(
+      'year' => CRM_Utils_Array::value('year', $this->_formValues)
+    );
+    foreach ($replacements as $search => $replacement) {
+      $sql = preg_replace('/%' . $search . '%/' , $replacement, $sql);
+    }
     $queries = explode(";", $sql);
     foreach ($queries as $query) {
       if (!empty(trim($query))) {
         CRM_Core_DAO::executeQuery($query);
       }
+    }
+  }
+
+  /**
+   * Construct a SQL FROM clause
+   *
+   * @return string, sql fragment with FROM and JOIN clauses
+   */
+  function from() {
+    // The use of $GLOBALS here is to make sure we only run executePreSQL once
+    // because this gives us some performance gains
+    if (empty($GLOBALS['pre_sql_executed'])) {
+      $this->executePreSQL();
+      $GLOBALS['pre_sql_executed'] = TRUE;
     }
 
     return "

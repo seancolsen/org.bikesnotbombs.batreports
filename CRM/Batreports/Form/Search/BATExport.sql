@@ -25,7 +25,7 @@ rider is in the reg group.
 
 /* initializations */
 
-set @year = 2017; /* TODO: set dynamically */
+set @year = %year%; /* TODO: set dynamically */
 set @event_id = (select id
   from civicrm_event
   where
@@ -77,7 +77,7 @@ create temporary table rider (
   group_id int(10),
   divvied_total decimal(7,2),
   smart_total decimal(7,2),
-  others char(200),
+  others text,
   captain char(50),
   emergency_name char(100),
   emergency_phone char(100),
@@ -395,7 +395,7 @@ insert into rider_2 select * from rider;
 drop temporary table if exists others;
 create temporary table others (
   contact_id int(10),
-  others char(200),
+  others text,
   unique index(contact_id) ) character set utf8 collate utf8_unicode_ci;
 insert into others
   select

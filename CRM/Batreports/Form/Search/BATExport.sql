@@ -56,9 +56,9 @@ create temporary table rider (
   contact_id int(10) not null,
   rider_sequential_id int(4) not null,
   rider_id int(6),
-  first_name char(50),
-  last_name char(50),
-  display_name char(50),
+  first_name varchar(128),
+  last_name varchar(128),
+  display_name varchar(128),
   part_id int(10) not null,
   part_status char(50),
   part_datetime datetime,
@@ -75,8 +75,7 @@ create temporary table rider (
   total_is_public int(1),
   team_name char(100),
   group_id int(10),
-  divvied_total decimal(7,2),
-  smart_total decimal(7,2),
+  pcp_total decimal(7,2),
   others text,
   captain char(50),
   emergency_name char(100),
@@ -240,7 +239,7 @@ insert into contact_total
   select
     soft.contact_id,
     status.label as status,
-    sum(contrib.total_amount) as total
+    sum(soft.amount) as total
   from civicrm_contribution_soft soft
   join civicrm_contribution contrib on contrib.id = soft.contribution_id
   join civicrm_option_value status on
@@ -274,210 +273,108 @@ left join (
 set rider.overdue_total = coalesce(total.total,0);
 
 
+/* BAT fundraising thus far, grouped by PCP */
 
-/* fundraising groups */
+drop temporary table if exists pcp_contribs;
+create temporary table pcp_contribs (
+  pcp_id int(10) not null,
+  contrib_id int(10) not null,
+  index(pcp_id),
+  index(contrib_id),
+  unique index(pcp_id, contrib_id) );
+insert into pcp_contribs select
+  pcp.id,
+  contrib.id
+from civicrm_pcp pcp
+join rider on rider.pcp_id = pcp.id
+join civicrm_contribution_soft soft on soft.pcp_id = pcp.id
+join civicrm_contribution contrib on contrib.id = soft.contribution_id
+where
+  contrib.contribution_status_id in ( 1, 6 ) /* completed, overdue */
+group by pcp.id, contrib.id;
 
-drop temporary table if exists fr_group;
-create temporary table fr_group (
-  id int(10) AUTO_INCREMENT not null,
-  team_name char(50),
-  reg_by_contact_id int(10),
-  group_type enum('reg','team'),
-  rider_count int(3),
-  slacker_count int(3) comment '# of riders not meeting their own indiv min',
-  fundr_min decimal(7,2),
-  fundraising_rider_count int(3),
-  total_fundraised decimal(8,2),
-  has_team_page int(1),
-  percent_of_min_raised decimal(6,1),
-  percent_of_riders_fundraising decimal(4,1),
-  min_is_met int(1),
-  is_group_fundraising int(1),
-  primary key (id),
-  unique index(team_name),
-  unique index(reg_by_contact_id),
-  index(group_type),
-  index(rider_count),
-  index(slacker_count),
-  index(fundraising_rider_count),
-  index(total_fundraised),
-  index(has_team_page),
-  index(percent_of_min_raised),
-  index(percent_of_riders_fundraising),
-  index(min_is_met),
-  index(is_group_fundraising) ) character set utf8 collate utf8_unicode_ci;
-
-insert into fr_group (group_type, reg_by_contact_id)
-  select
-    'reg' as group_type,
-    rider.reg_by_contact_id as reg_by_contact_id
-  from rider
-  group by rider.reg_by_contact_id
-  having count(rider.contact_id) > 1;
-
-insert into fr_group (group_type, team_name)
-  select
-    'team' as group_type,
-    trim(rider.team_name) as team_name
-  from rider
-  where length(rider.team_name) > 1
-  group by rider.team_name
-  having count(rider.contact_id) > 1;
-
-drop temporary table if exists fr_group2;
-create temporary table fr_group2 like fr_group;
-insert into fr_group2 select * from fr_group;
+drop temporary table if exists pcp_total;
+create temporary table pcp_total (
+  pcp_id int(10) not null,
+  total decimal(7,2) not null,
+  unique index(pcp_id) );
+insert into pcp_total select
+  pcp_contribs.pcp_id,
+  sum(contrib.total_amount)
+from pcp_contribs
+join civicrm_contribution contrib on contrib.id = pcp_contribs.contrib_id
+group by pcp_contribs.pcp_id;
 
 update rider
-left join fr_group team_group on team_group.team_name = rider.team_name
-left join fr_group2 reg_group on
-  reg_group.reg_by_contact_id = rider.reg_by_contact_id
-left join approved_team on approved_team.team_name = rider.team_name
-set group_id = if( approved_team.team_name is not null,
-  team_group.id,
-  coalesce(reg_group.id, team_group.id ) );
+left join pcp_total on pcp_total.pcp_id = rider.pcp_id
+set rider.pcp_total = coalesce(pcp_total.total,0);
 
 
-/* calculate group stats based on riders
-   using fr_group2 to circumvent inability to use 'group by' with 'update' */
+/* Notes to be printed on check in sheet */
 
-truncate table fr_group2;
-insert into fr_group2 (id, rider_count, slacker_count, fundr_min,
-    fundraising_rider_count, total_fundraised)
-  select
-    group_id as id,
-    count(*) as rider_count,
-    sum(if(indiv_total < fundr_min, 1, 0)) as slacker_count,
-    sum(fundr_min) as fundr_min,
-    sum(if(indiv_total > 0, 1, 0)) as fundraising_rider_count,
-    sum(indiv_total) as total_fundraised
-  from rider
-  where group_id is not null
-  group by group_id;
-update fr_group a
-join fr_group2 b on a.id = b.id
-set
-  a.rider_count = b.rider_count,
-  a.slacker_count = b.slacker_count,
-  a.fundr_min = b.fundr_min,
-  a.fundraising_rider_count = b.fundraising_rider_count,
-  a.total_fundraised = b.total_fundraised;
-
-
-update fr_group
-set has_team_page = 0
-where has_team_page is null;
-
-update fr_group
-left join approved_team on approved_team.team_name = fr_group.team_name
-set
-  percent_of_min_raised = 100 * coalesce(total_fundraised,0) / fundr_min,
-  percent_of_riders_fundraising = 100 * fundraising_rider_count / rider_count,
-  min_is_met = if(total_fundraised >= fundr_min, 1, 0),
-  is_group_fundraising = if(
-    approved_team.team_name is not null OR
-      ( group_type = 'reg' AND fundraising_rider_count < 2 ),
-    1, 0 );
-
-update rider
-join fr_group on fr_group.id = rider.group_id
-set rider.divvied_total =
-  fr_group.total_fundraised * (rider.fundr_min / fr_group.fundr_min)
-where fr_group.is_group_fundraising = 1;
-
-update rider
-set rider.smart_total = coalesce(divvied_total, indiv_total);
-
-drop temporary table if exists rider_2;
-create temporary table rider_2 like rider;
-insert into rider_2 select * from rider;
-
-drop temporary table if exists others;
-create temporary table others (
+drop temporary table if exists benefactor;
+create temporary table benefactor (
   contact_id int(10),
-  others text,
-  unique index(contact_id) ) character set utf8 collate utf8_unicode_ci;
-insert into others
-  select
-    rider.contact_id,
-    group_concat(concat_ws(' ', rider_2.first_name, rider_2.last_name)
-      order by rider_2.first_name, rider_2.last_name separator ', ')
-  from rider
-  join rider_2 on rider_2.group_id = rider.group_id and
-    rider_2.contact_id != rider.contact_id
-  where
-    rider.reg_level != 'team' and
-    rider_2.reg_level != 'team'
-  group by rider.contact_id;
+  names text,
+  unique index(contact_id) );
+insert into benefactor select
+  rider.contact_id,
+  group_concat(
+    distinct
+    concat_ws(' ', benefactor.first_name, benefactor.last_name)
+    separator ', '
+  )
+from rider
+join civicrm_contribution_soft soft on soft.contact_id = rider.contact_id
+join civicrm_pcp pcp on pcp.id = soft.pcp_id
+join civicrm_contact benefactor on benefactor.id = pcp.contact_id
+where benefactor.id != rider.contact_id
+group by rider.contact_id;
 
 update rider
-join others on others.contact_id = rider.contact_id
-set rider.others = others.others;
+join benefactor on benefactor.contact_id = rider.contact_id
+set note = concat(
+  @note_header,
+  'some of the money that ',
+  benefactor.names,
+  ' raised has been distributed to your total since you registered together. ',
+  @note_footer_reg )
+where indiv_total > pcp_total;
 
-update rider
-join rider_2 on
-  rider_2.group_id = rider.group_id and
-  rider_2.contact_id != rider.contact_id and
-  rider_2.indiv_total > 0
-set rider.captain = concat_ws(' ',rider_2.first_name, rider_2.last_name)
-where rider.indiv_total = 0;
+
+drop temporary table if exists beneficiary;
+create temporary table beneficiary (
+  contact_id int(10),
+  names text,
+  unique index(contact_id) );
+insert into beneficiary select
+  rider.contact_id,
+  group_concat(
+    distinct
+    concat_ws(' ', beneficiary.first_name, beneficiary.last_name)
+    separator ', '
+  )
+from rider
+join civicrm_pcp pcp on pcp.contact_id = rider.contact_id
+join civicrm_contribution_soft soft on soft.pcp_id = pcp.id
+join civicrm_contact beneficiary on beneficiary.id = soft.contact_id
+where beneficiary.id != rider.contact_id
+group by rider.contact_id;
 
 set @note_header = 'Note: ';
 set @note_footer_reg =
   'If you have questions, please see the help desk, ideally together.';
-set @note_footer_team =
-  'If you have questions, please see the help desk.';
 
 update rider
-join fr_group on fr_group.id = rider.group_id
-set note = concat(
-  @note_header,
-  'some of the money that ',
-  rider.captain,
-  ' raised has been distributed to your total since you registered together. ',
-  @note_footer_reg )
-where
-  fr_group.group_type = 'reg' and
-  rider.indiv_total < rider.smart_total;
-
-update rider
-join fr_group on fr_group.id = rider.group_id
+join beneficiary on beneficiary.contact_id = rider.contact_id
 set note = concat(
   @note_header,
   'the money you fundraised has been automatically distributed between you ',
   'and the following other riders: ',
-  rider.others,
+  beneficiary.names,
   ' (due to the fact that you registered together and used only one ',
   'fundraising page). ',
-  @note_footer_reg )
-where
-  fr_group.group_type = 'reg' and
-  rider.indiv_total > rider.smart_total;
-
-update rider
-join fr_group on fr_group.id = rider.group_id
-set note = concat(
-  @note_header,
-  'because you are team fundraising with \"',
-  fr_group.team_name,
-  '\", your total has come from the distributed total of the entire team. ',
-  @note_footer_team )
-where
-  fr_group.group_type = 'team' and
-  rider.indiv_total < rider.smart_total;
-
-update rider
-join fr_group on fr_group.id = rider.group_id
-set note = concat(
-  @note_header,
-  'the money you fundraised has been automatically distributed between you ',
-  'and the other members of \"',
-  fr_group.team_name,
-  '\" (', rider.others, '). ',
-  @note_footer_team )
-where
-  fr_group.group_type = 'team' and
-  rider.indiv_total > rider.smart_total;
+  @note_footer_reg );
 
 
 /* bring in summary of previous BAT years registered */

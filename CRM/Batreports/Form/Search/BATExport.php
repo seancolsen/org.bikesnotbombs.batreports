@@ -73,8 +73,8 @@ implements CRM_Contact_Form_Search_Interface {
       ts('drupal_user_name') => 'drupal_user_name',
       ts('route ') => 'route',
       ts('total_is_public') => 'total_is_public',
-      ts('total') => 'total',
-      ts('indiv_t') => 'indiv_t',
+      ts('indiv_total') => 'indiv_total',
+      ts('pcp_total') => 'pcp_total',
       ts('overdue') => 'overdue',
       ts('fmin') => 'fmin',
       ts('pcp_id') => 'pcp_id',
@@ -145,8 +145,8 @@ implements CRM_Contact_Form_Search_Interface {
       drupal_user_name,
       route,
       total_is_public,
-      format(smart_total,2) as total,
-      if(indiv_total = smart_total, '(same)', indiv_total) as indiv_t,
+      format(indiv_total,2) as indiv_total,
+      format(pcp_total,2) as pcp_total,
       format(overdue_total,2) as overdue,
       format(fundr_min,0) as fmin,
       pcp_id,
@@ -171,9 +171,10 @@ implements CRM_Contact_Form_Search_Interface {
     $sqlFile = __DIR__ . "/" . basename(__FILE__, '.php') . '.sql';
     $sql = file_get_contents($sqlFile);
     $replacements = array(
-      'year' => CRM_Utils_Array::value('year', $this->_formValues)
+      'year' => CRM_Utils_Array::value('year', $this->_formValues),
     );
     foreach ($replacements as $search => $replacement) {
+      // TODO: escape to prevent SQLi
       $sql = preg_replace('/%' . $search . '%/' , $replacement, $sql);
     }
     $queries = explode(";", $sql);

@@ -107,7 +107,7 @@ implements CRM_Contact_Form_Search_Interface {
         $this->select(),
         $offset,
         $rowcount,
-        $sort,
+      'pile, last_name, first_name',
         $includeContactIDs,
         "group by rider.contact_id");
   }

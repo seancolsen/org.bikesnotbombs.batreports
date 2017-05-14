@@ -25,7 +25,6 @@ rider is in the reg group.
 
 /* initializations */
 
-set @year = %year%; /* TODO: set dynamically */
 set @event_id = (select id
   from civicrm_event
   where
@@ -213,12 +212,13 @@ create temporary table drupal_user (
   unique index(id),
   unique index(name),
   unique index(email) ) character set utf8 collate utf8_unicode_ci;
-/* insert into drupal_user
-  select
-    uid,
-    name,
-    mail
-  from liv_drup.users */ /* TODO: get table name dynamically */
+set @s = concat('
+  insert into drupal_user
+  select uid, name, mail
+  from ', @drupal_table, '.users');
+prepare drupal_user_insert from @s;
+execute drupal_user_insert;
+deallocate prepare drupal_user_insert;
 
 update rider
 join civicrm_uf_match uf on uf.contact_id = rider.contact_id

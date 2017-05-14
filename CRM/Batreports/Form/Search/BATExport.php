@@ -165,18 +165,25 @@ implements CRM_Contact_Form_Search_Interface {
   /**
    * Create temporary tables based on SQL in a file with the same name as this
    * file (but .sql at the end instead of .php). Values in the sql file are
-   * replaced with dynamic values when they look like %this%.
+   * replaced with dynamic values by setting SQL variables before loading the
+   * main SQL
    */
   function executePreSQL() {
+    // Set SQL variable for the year, as supplied in the search form
+    CRM_Core_DAO::executeQuery('set @year = %1;', array(
+      1 => array(CRM_Utils_Array::value('year', $this->_formValues), 'Integer'),
+    ));
+
+    // Set SQL variable for the current Drupal database name (since we use this
+    // to find the Drupal username of riders
+    $drupalDB = $GLOBALS['databases']['default']['default']['database'];
+    CRM_Core_DAO::executeQuery('set @drupal_table = %1;', array(
+      1 => array($drupalDB, 'String'),
+    ));
+
+    // Evaluate SQL from file
     $sqlFile = __DIR__ . "/" . basename(__FILE__, '.php') . '.sql';
     $sql = file_get_contents($sqlFile);
-    $replacements = array(
-      'year' => CRM_Utils_Array::value('year', $this->_formValues),
-    );
-    foreach ($replacements as $search => $replacement) {
-      // TODO: escape to prevent SQLi
-      $sql = preg_replace('/%' . $search . '%/' , $replacement, $sql);
-    }
     $queries = explode(";", $sql);
     foreach ($queries as $query) {
       if (!empty(trim($query))) {

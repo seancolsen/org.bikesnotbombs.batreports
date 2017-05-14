@@ -1,28 +1,4 @@
 
-/*
-
-Ways of linking riders into groups
- team name (team group)
- people registered together (reg group)
-
-Teams are either approved for combine fundraising, or not.
-
-We know which teams are approved by checking the team name in the participation
-record that the *team* contact has (not individual) when registered for BAT
-with the role 'fundraising team'.
-
-Some riders will be in a reg group AND a team group
-
-Some team groups will fully contain reg groups (this data is okay)
-However, if a reg group is not fully contained within a team, this is bad data.
-
-We want each rider to be in one or zero groups. So if a rider is in a reg group
-and a team group, we use the following logic to decide: if the team is approved
-then the rider is in the team group. If the team is not approved, then the
-rider is in the reg group.
-
-*/
-
 /* initializations */
 
 set @event_id = (select id

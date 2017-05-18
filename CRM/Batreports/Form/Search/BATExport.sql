@@ -45,7 +45,7 @@ create temporary table rider (
   pcp_id int(10),
   pcp_url char(200),
   fundr_min decimal(6,2),
-  indiv_total decimal(7,2),
+  total decimal(7,2),
   overdue_total decimal(7,2),
   total_is_public int(1),
   team_name char(100),
@@ -237,7 +237,7 @@ left join (
   from contact_total
   group by contact_id
   ) total on total.contact_id = rider.contact_id
-set rider.indiv_total = coalesce(total.total,0);
+set rider.total = coalesce(total.total,0);
 
 update rider
 left join (
@@ -315,7 +315,7 @@ set note = concat(
   benefactor.names,
   ' raised has been distributed to your total since you registered together. ',
   @note_footer_reg )
-where indiv_total > pcp_total;
+where total > pcp_total;
 
 
 drop temporary table if exists beneficiary;

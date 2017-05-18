@@ -419,3 +419,99 @@ group by contact_id;
 update rider
 join prev_max_direct on prev_max_direct.contact_id = rider.contact_id
 set rider.prev_max_direct = prev_max_direct.prev_max_direct;
+
+drop temporary table if exists results;
+create temporary table results (
+  page int(10),
+  pile char(20),
+  cid int(10),
+  rnum int(10),
+  last_name varchar(128),
+  first_name varchar(128),
+  email varchar(255),
+  phone varchar(255),
+  address varchar(255),
+  status char(50),
+  reg_date datetime,
+  reg_by_contact_id int(10),
+  reg_by_name varchar(128),
+  drupal_user_name char(100),
+  route char(50),
+  total_is_public int(1),
+  total decimal(7,2),
+  pcp_total decimal(7,2),
+  overdue decimal(7,2),
+  fmin decimal(7,2),
+  pcp_id int(10),
+  pcp_url char(100),
+  time_printed datetime,
+  bat_age int(3),
+  team_name char(100),
+  emergency_name char(100),
+  emergency_phone char(100),
+  note text,
+  prev_years char(200),
+  prev_max_direct decimal(7,2)
+) character set utf8 collate utf8_unicode_ci;
+insert into results select
+  null as page,
+  case
+    when rider.last_name rlike '^ *[A-B].*' then 'A-B'
+    when rider.last_name rlike '^ *[C-D].*' then 'C-D'
+    when rider.last_name rlike '^ *[E-G].*' then 'E-G'
+    when rider.last_name rlike '^ *[H-K].*' then 'H-K'
+    when rider.last_name rlike '^ *(L|M[A-E]).*' then 'L-Me'
+    when rider.last_name rlike '^ *(M[F-Z]|[N-Q]).*' then 'Mf-Q'
+    when rider.last_name rlike '^ *(R|S[A-M]).*' then 'R-Sm'
+    when rider.last_name rlike '^ *(S[N-Z]|[T-Z]).*' then 'Sn-Z'
+    else '??'
+  end as pile,
+  rider.contact_id as cid,
+  rider.rider_id as rnum,
+  rider.last_name as last_name,
+  rider.first_name as first_name,
+  group_concat(distinct email.email separator '\n') as email,
+  group_concat(distinct phone.phone separator '\n') as phone,
+  group_concat(distinct concat_ws(', ', street_address, supplemental_address_1,
+          city, state.abbreviation, postal_code) separator '\n') as address,
+  rider.part_status as status,
+  rider.part_datetime as reg_date,
+  rider.reg_by_contact_id,
+  rider.reg_by_name,
+  rider.drupal_user_name,
+  rider.route,
+  rider.total_is_public,
+  rider.total as total,
+  rider.pcp_total as pcp_total,
+  rider.overdue_total as overdue,
+  rider.fundr_min as fmin,
+  rider.pcp_id,
+  rider.pcp_url,
+  now() as time_printed,
+  timestampdiff(year, contact.birth_date, @this_bat) as bat_age,
+  coalesce(rider.team_name,'') as team_name,
+  rider.emergency_name,
+  rider.emergency_phone,
+  rider.note,
+  rider.prev_years,
+  rider.prev_max_direct
+from rider
+join civicrm_contact contact on contact.id = rider.contact_id
+left join civicrm_email email on
+  email.contact_id = rider.contact_id and
+  email.is_primary = 1
+left join civicrm_phone phone on
+  phone.contact_id = rider.contact_id and
+  phone.is_primary = 1
+left join civicrm_address address on
+  address.contact_id = rider.contact_id and
+  address.is_primary = 1
+left join civicrm_state_province state on state.id = address.state_province_id
+where
+  rider.reg_level != 'team'
+group by rider.contact_id
+order by pile, last_name, first_name;
+
+set @page = 0;
+update results
+set page = @page := @page +1;

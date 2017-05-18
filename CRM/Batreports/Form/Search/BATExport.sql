@@ -187,7 +187,7 @@ create temporary table drupal_user (
   email char(50),
   unique index(id),
   unique index(name),
-  unique index(email) ) character set utf8 collate utf8_unicode_ci;
+  index(email) ) character set utf8 collate utf8_unicode_ci;
 set @s = concat('
   insert into drupal_user
   select uid, name, mail

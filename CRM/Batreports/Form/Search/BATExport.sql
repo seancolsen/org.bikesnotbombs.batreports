@@ -297,7 +297,10 @@ insert into benefactor select
   rider.contact_id,
   group_concat(
     distinct
-    concat_ws(' ', benefactor.first_name, benefactor.last_name)
+    coalesce(
+      concat( benefactor.first_name, ' ', benefactor.last_name),
+      benefactor.display_name
+    )
     separator ', '
   )
 from rider

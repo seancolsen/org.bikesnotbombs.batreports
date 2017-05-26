@@ -307,6 +307,10 @@ join civicrm_contact benefactor on benefactor.id = pcp.contact_id
 where benefactor.id != rider.contact_id
 group by rider.contact_id;
 
+SET @note_header = 'Note: ';
+SET @note_footer_reg =
+'If you have questions, please see the help desk, ideally together.';
+
 update rider
 join benefactor on benefactor.contact_id = rider.contact_id
 set note = concat(
@@ -336,10 +340,6 @@ join civicrm_contribution_soft soft on soft.pcp_id = pcp.id
 join civicrm_contact beneficiary on beneficiary.id = soft.contact_id
 where beneficiary.id != rider.contact_id
 group by rider.contact_id;
-
-set @note_header = 'Note: ';
-set @note_footer_reg =
-  'If you have questions, please see the help desk, ideally together.';
 
 update rider
 join beneficiary on beneficiary.contact_id = rider.contact_id
